@@ -109,23 +109,35 @@ namespace ConnectToCRM
         {            
             try
             {
-                List<string> idMainList = organisationsCollection.Select(o => o.ConceptCodeId).ToList();
-                EntityCollection existingCRMRecords = new EntityCollection();
+                List<string> idMainList = organisationsCollection.Select(o => o.ConceptCodeId).ToList();                
                 var response = ConnectToCRM();
 
-                var existingOrgSubList = GetExistingOrganizations(idMainList, existingCRMRecords);
+                EntityCollection existingCRMRecords = QueryCRMForConceptCodeIds(idMainList);
+                List<string> existingOrgSubList = existingCRMRecords.Entities.Select(e => e.GetAttributeValue<string>("els_organizationid")).ToList();
                 var nonExistingOrgSubList = idMainList.Except(existingOrgSubList).ToList();
 
                 ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
                 CreateNewrecords(organisationsCollection, nonExistingOrgSubList, exeReq);
-                //TODO Add method for Update for existingCRMRecords
-                //TODO ExecuteThe Requests
+                UpdateExistingRecords(existingCRMRecords, organisationsCollection, exeReq);
+
                 ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(exeReq);
                 return "Creation Succesfull";
             }
             catch(Exception ex)
             {
                 return "ERROR:" + ex.Message;
+            }
+        }
+        public static void UpdateExistingRecords(EntityCollection existingOrganisations, ICollection<ConceptCode> organisationsCollection, ExecuteMultipleRequest exeReq)
+        {
+            foreach (Entity existingOrg in existingOrganisations.Entities)
+            {
+                var ConceptCodeId = existingOrg.GetAttributeValue<string>("els_organizationid");
+                var org = organisationsCollection.Where(c => c.ConceptCodeId.Equals(ConceptCodeId)).FirstOrDefault();
+                UpdateExistingCRMRecord(existingOrg, org);
+
+                UpdateRequest updateRequest = new UpdateRequest { Target = existingOrg };
+                exeReq.Requests.Add(updateRequest);
             }
         }
         public static void CreateNewrecords(ICollection<ConceptCode> organisationsCollection, List<string> idList, ExecuteMultipleRequest exeReq)
@@ -143,32 +155,55 @@ namespace ConnectToCRM
                     break;
             }
         }
+        public static void UpdateExistingCRMRecord(Entity existingOrg, ConceptCode org)
+        {
+            var attributes = org.Attributes.ToList();
+
+            var longName = attributes.Where(c => c.AttributeName.Equals("LongName"));
+            existingOrg["els_longname"] = $"UPDATED_{longName.First().AttributeValue.FirstOrDefault()}";
+
+            var parentId = attributes.Where(c => c.AttributeName.Equals("ParentId"));
+            Entity parentRec = GetConceptCodeRef_ByConceptCodeID(parentId.First().AttributeValue.FirstOrDefault());
+            if (parentRec.Id != Guid.Empty)
+            {
+                existingOrg["els_parentid"] = parentRec.ToEntityReference();
+            }
+        }
         public static Entity CreateNewCRMRecord(ConceptCode org)
         {
             Entity newOrg = new Entity("els_soteorganisaatiorekisteri");
-            newOrg["els_organizationid"] = org.ClassificationId;
+            newOrg["els_organizationid"] = org.ConceptCodeId;
             newOrg["els_beginningdate"] = org.BeginDate.DateTime;
             newOrg["els_expiringdate"] = org.ExpirationDate.DateTime;
+
+            var attributes = org.Attributes.ToList();
+
+            var longName = attributes.Where(c => c.AttributeName.Equals("LongName"));
+            newOrg["els_longname"] = longName.First().AttributeValue.FirstOrDefault();
+
+
             //TODO add attributes from mappings
-            Dictionary<string, string> mappings = GetMappings();
-            foreach(var attr in org.Attributes)
-            {
-                if(mappings.ContainsKey(attr.AttributeName))
-                newOrg[mappings[attr.AttributeName]] = attr.AttributeValue.First();
-            }
-          
+            //Dictionary<string, string> mappings = GetMappings();
+            //foreach(var attr in org.Attributes)
+            //{
+            //    if(mappings.ContainsKey(attr.AttributeName))
+            //    newOrg[mappings[attr.AttributeName]] = attr.AttributeValue.First();
+            //}
+
             return newOrg;
         }
-        public static List<string> GetExistingOrganizations(List<string> idMainList, EntityCollection existingCRMRecords)
+        public static Entity GetConceptCodeRef_ByConceptCodeID(string conceptCodeID)
         {
-            List<string> result = new List<string>();
-            var existingRecords = QueryCRMForConceptCodeIds(idMainList);
-            if (existingRecords.Entities.Any())
-            {
-                existingCRMRecords = existingRecords;
-                result = existingRecords.Entities.Select(e => e.GetAttributeValue<string>("els_organizationid")).ToList();
-            }
+            Entity result = new Entity();
+            var query = new QueryExpression("els_soteorganisaatiorekisteri");
+            query.ColumnSet = new ColumnSet("els_organizationid");
 
+            query.Criteria.AddCondition("els_organizationid", ConditionOperator.Equal, conceptCodeID);
+            var response = service.RetrieveMultiple(query);
+            if (response != null && response.Entities.Any())
+            {
+                result = response.Entities.First();
+            }
             return result;
         }
         public static EntityCollection QueryCRMForConceptCodeIds(List<string> idMainList)
