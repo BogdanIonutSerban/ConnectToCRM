@@ -676,6 +676,19 @@ namespace ConnectToCRM.Classes
 
     }
 
+    public partial class RequestObject
+    {
+        [Newtonsoft.Json.JsonProperty("classificationId", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string ClassificationId { get; set; }
+
+        [Newtonsoft.Json.JsonProperty("modifiedAfter")]
+        public System.DateTimeOffset? ModifiedAfter { get; set; }
+
+        [Newtonsoft.Json.JsonProperty("executionType")]
+        [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public ExeucutionType ExecutionType { get; set; }
+    }
+
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "13.15.9.0 (NJsonSchema v10.6.8.0 (Newtonsoft.Json v11.0.0.0))")]
     public partial class ConceptCode
     {
@@ -1538,6 +1551,18 @@ namespace ConnectToCRM.Classes
         [System.Runtime.Serialization.EnumMember(Value = @"REFERENCE")]
         REFERENCE = 3,
 
+    }
+    public enum ExeucutionType
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"InitialCreate")]
+        InitialCreate = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"InitialUpdate")]
+        InitialUpdate = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"DailyUpsert")]
+        DailyUpsert = 2
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "13.15.9.0 (NJsonSchema v10.6.8.0 (Newtonsoft.Json v11.0.0.0))")]

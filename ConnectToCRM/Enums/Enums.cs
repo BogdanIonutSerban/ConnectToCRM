@@ -9,6 +9,7 @@ namespace ConnectToCRM.Enums
         Ok = 1,
         NotOk = 0
     }
+
     public enum Verb
     {
         GET = 0,
