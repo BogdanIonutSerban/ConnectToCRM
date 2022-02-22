@@ -162,7 +162,7 @@ namespace ConnectToCRM
 
                 CreateRequest createRequest = new CreateRequest { Target = newCrmOrg };
                 exeReq.Requests.Add(createRequest);
-                if (i == 1)//execute only once
+                if (i == 1)//execute few inserts
                     break;
             }
         }
