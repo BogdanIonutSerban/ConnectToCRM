@@ -30,9 +30,9 @@ namespace ConnectToCRM
 
             try
             {
-                  ExecuteJob();
+                var result = ExecuteJob();
 
-                return new OkObjectResult("Success!");
+                return new OkObjectResult(result);
             }
             catch(Exception ex)
             {
@@ -55,7 +55,7 @@ namespace ConnectToCRM
                 {
                     result = GetOrganisationsFromCodeserver(id, pageNo);
                     ConceptCodes organisations = JsonConvert.DeserializeObject<ConceptCodes>(result);
-                    UpsertToCRM(organisations.ConceptCodes1);
+                    result = UpsertToCRM(organisations.ConceptCodes1);
                     totalPages = organisations.TotalPages;
                     pageNo++;
                 } while (pageNo < totalPages && pageNo == 2);
@@ -117,11 +117,22 @@ namespace ConnectToCRM
                 var nonExistingOrgSubList = idMainList.Except(existingOrgSubList).ToList();
 
                 ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
-                CreateNewrecords(organisationsCollection, nonExistingOrgSubList, exeReq);
-                UpdateExistingRecords(existingCRMRecords, organisationsCollection, exeReq);
+
+                //if initial import was not done create all entities else do update logic
+                if(existingCRMRecords.Entities.Count == 0)
+                    CreateNewrecords(organisationsCollection, nonExistingOrgSubList, exeReq);
+                else 
+                    UpdateExistingRecords(existingCRMRecords, organisationsCollection, exeReq);
 
                 ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(exeReq);
-                return "Creation Succesfull";
+                if (responseWithResults.IsFaulted == true)
+                {
+                    return responseWithResults.Responses.FirstOrDefault().Fault.ToString();
+                }
+                else
+                {
+                    return "Creation Succesfull";
+                }
             }
             catch(Exception ex)
             {
@@ -160,7 +171,6 @@ namespace ConnectToCRM
             var attributes = org.Attributes.ToList();
 
             var longName = attributes.Where(c => c.AttributeName.Equals("LongName"));
-            existingOrg["els_longname"] = $"UPDATED_{longName.First().AttributeValue.FirstOrDefault()}";
 
             var parentId = attributes.Where(c => c.AttributeName.Equals("ParentId"));
             Entity parentRec = GetConceptCodeRef_ByConceptCodeID(parentId.First().AttributeValue.FirstOrDefault());
@@ -168,6 +178,40 @@ namespace ConnectToCRM
             {
                 existingOrg["els_parentid"] = parentRec.ToEntityReference();
             }
+            Dictionary<string, string> mappings = GetMappings();
+            foreach (var attr in org.Attributes)
+            {
+                if (mappings.ContainsKey(attr.AttributeName))
+                {
+                    Console.WriteLine("AttributeName:" + attr.AttributeName);
+                    if (attr.AttributeName == "Sektori")
+                    {
+                        existingOrg[mappings[attr.AttributeName]] = GetSektoriOptionSetByLabel(attr.AttributeValue.FirstOrDefault());
+                    }
+                    else if (attr.AttributeName == "Sos.palveluyksikkö" || attr.AttributeName == "Sos.toimintayksikkö" || attr.AttributeName == "Terv.palveluyksikkö")
+                    {
+                        //get values for boolean fields
+                        existingOrg[mappings[attr.AttributeName]] = GetBooleanFromString(attr.AttributeValue.FirstOrDefault());
+
+                    }
+                    else if (attr.AttributeName == "ParentId")
+                    {
+                        existingOrg[mappings[attr.AttributeName]] = GetEntityByName("els_soteorganisaatiorekisteri", attr.AttributeValue.FirstOrDefault(), "els_organizationid", service);
+
+
+                    }
+                    else if (attr.AttributeName == "Sijainti kunta")
+                    {
+                        existingOrg[mappings[attr.AttributeName]] = GetEntityByName("els_koodi", attr.AttributeValue.FirstOrDefault(), "els_koodinnimi", service);
+                    }
+                    else
+                    {
+                        existingOrg[mappings[attr.AttributeName]] = attr.AttributeValue.FirstOrDefault();//for string fields only get value
+                    }
+                }
+            }
+
+            existingOrg["els_longname"] = $"UPDATED_{longName.First().AttributeValue.FirstOrDefault()}";
         }
         public static Entity CreateNewCRMRecord(ConceptCode org)
         {
@@ -175,21 +219,38 @@ namespace ConnectToCRM
             newOrg["els_organizationid"] = org.ConceptCodeId;
             newOrg["els_beginningdate"] = org.BeginDate.DateTime;
             newOrg["els_expiringdate"] = org.ExpirationDate.DateTime;
+            Dictionary<string, string> mappings = GetMappings();
+            foreach (var attr in org.Attributes)
+            {
+                if (mappings.ContainsKey(attr.AttributeName))
+                {
+                    Console.WriteLine("AttributeName:" + attr.AttributeName);
+                    if (attr.AttributeName == "Sektori")
+                    {
+                        newOrg[mappings[attr.AttributeName]] = GetSektoriOptionSetByLabel(attr.AttributeValue.FirstOrDefault());
+                    }
+                    else if (attr.AttributeName == "Sos.palveluyksikkö" || attr.AttributeName == "Sos.toimintayksikkö" || attr.AttributeName == "Terv.palveluyksikkö")
+                    {
+                        //get values for boolean fields
+                       newOrg[mappings[attr.AttributeName]] = GetBooleanFromString(attr.AttributeValue.FirstOrDefault());
 
-            var attributes = org.Attributes.ToList();
+                    }
+                    else if (attr.AttributeName == "ParentId")
+                    {
+                        newOrg[mappings[attr.AttributeName]] = GetEntityByName("els_soteorganisaatiorekisteri", attr.AttributeValue.FirstOrDefault(), "els_organizationid", service);
 
-            var longName = attributes.Where(c => c.AttributeName.Equals("LongName"));
-            newOrg["els_longname"] = longName.First().AttributeValue.FirstOrDefault();
 
-
-            //TODO add attributes from mappings
-            //Dictionary<string, string> mappings = GetMappings();
-            //foreach(var attr in org.Attributes)
-            //{
-            //    if(mappings.ContainsKey(attr.AttributeName))
-            //    newOrg[mappings[attr.AttributeName]] = attr.AttributeValue.First();
-            //}
-
+                    }
+                    else if (attr.AttributeName == "Sijainti kunta")
+                    {
+                        newOrg[mappings[attr.AttributeName]] = GetEntityByName("els_koodi", attr.AttributeValue.FirstOrDefault(), "els_koodinnimi", service);
+                    }
+                    else
+                    {
+                        newOrg[mappings[attr.AttributeName]] = attr.AttributeValue.FirstOrDefault();//for string fields only get value
+                    }
+                }
+            }
             return newOrg;
         }
         public static Entity GetConceptCodeRef_ByConceptCodeID(string conceptCodeID)
@@ -272,13 +333,60 @@ namespace ConnectToCRM
             mappings.Add("Sektori", "els_sektori");
             mappings.Add("Sijainti kunta", "els_sijaintikunta");
             mappings.Add("Sos.palveluyksikkö", "els_sospalyksikko");
-            mappings.Add("Sos.toimintayksikkö", "sostoimintayksikko");
+            mappings.Add("Sos.toimintayksikkö", "els_sostoimintayksikko");
             mappings.Add("Terv.palveluyksikkö", "els_tervpalveluyksikko");
             mappings.Add("TOPI-koodi", "els_topikoodi");
             mappings.Add("TOPI-nimi", "els_topinimi");
             mappings.Add("Y-Tunnus", "els_ytunnus");
 
             return mappings;
+        }
+
+        public static bool GetBooleanFromString(string str)
+        {
+            if(str == "T")
+            {
+                return true;
+            }
+            return false;
+        }
+
+        //Gets entity reference lookup based on the ConditionField 
+        public static EntityReference GetEntityByName(string entityName, string name, string conditionField, IOrganizationService service)
+        {
+            QueryExpression qryEntity = new QueryExpression(entityName);
+            qryEntity.Criteria.AddCondition(conditionField, ConditionOperator.Equal, name);
+
+            EntityCollection ecEntity = service.RetrieveMultiple(qryEntity);
+
+            if(ecEntity.Entities.Count > 0)
+            {
+                return ecEntity.Entities[0].ToEntityReference();
+            }
+            return null;
+        }
+
+
+        /*
+        Options:
+            861120000: 1 Julkinen
+            861120001: 2 Yksityinen
+            861120002: 3 Yksityinen itseilmoitettu yksikkö
+        */
+        public static OptionSetValue GetSektoriOptionSetByLabel(string label)
+        {
+            if(label == "2 Yksityinen")
+            {
+                return new OptionSetValue(861120001);
+            }
+            else if (label == "3 Yksityinen itseilmoitettu yksikkö")
+            {
+                return new OptionSetValue(861120002);
+            }
+            else
+            {
+                return new OptionSetValue(861120000);
+            }
         }
     }
 }

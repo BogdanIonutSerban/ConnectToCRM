@@ -16,5 +16,5 @@ namespace ConnectToCRM.Enums
         PUT = 2,
         PATCH = 3,
         DELETE = 4
-    }
+    }    
 }
