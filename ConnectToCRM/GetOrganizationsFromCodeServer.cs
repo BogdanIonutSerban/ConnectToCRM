@@ -119,10 +119,8 @@ namespace ConnectToCRM
                 ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
 
                 //if initial import was not done create all entities else do update logic
-                if(existingCRMRecords.Entities.Count == 0)
-                    CreateNewrecords(organisationsCollection, nonExistingOrgSubList, exeReq);
-                else 
-                    UpdateExistingRecords(existingCRMRecords, organisationsCollection, exeReq);
+                CreateNewrecords(organisationsCollection, nonExistingOrgSubList, exeReq);
+                UpdateExistingRecords(existingCRMRecords, organisationsCollection, exeReq);
 
                 ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(exeReq);
                 if (responseWithResults.IsFaulted == true)
