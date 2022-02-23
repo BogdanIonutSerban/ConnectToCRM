@@ -1,4 +1,5 @@
-﻿using Microsoft.PowerPlatform.Dataverse.Client;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.PowerPlatform.Dataverse.Client;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using System;
@@ -11,10 +12,12 @@ namespace ConnectToCRM.Classes
     public class CRM_RecordManager
     {
         public static ServiceClient service { get; private set; }
+        ILogger log;
 
-        public CRM_RecordManager( ServiceClient _service)
+        public CRM_RecordManager( ServiceClient _service, ILogger _log)
         {
             service = _service;
+            log = _log;
         }
 
         public Entity CreateNewCRMRecord(ConceptCode retrievedOrg)

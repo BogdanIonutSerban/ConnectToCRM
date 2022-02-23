@@ -9,6 +9,7 @@ using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.PowerPlatform.Dataverse.Client;
 using ConnectToCRM.Classes;
 using ConnectToCRM.Services;
+using Microsoft.Extensions.Logging;
 
 namespace ConnectToCRM.Classes
 {
@@ -17,17 +18,18 @@ namespace ConnectToCRM.Classes
         public ICollection<ConceptCode> organisationsCollection { get; private set; }
         public static ServiceClient service { get; private set; }
         CRM_RecordManager recordManager;
+        ILogger log;
+        public ResponseObject response { get; private set; } 
 
-        public CRM_ImportManager(ICollection<ConceptCode> _collection, ServiceClient _service)
+        public CRM_ImportManager(ICollection<ConceptCode> _collection, ILogger _log)
         {
             organisationsCollection = _collection;
-            service = _service;
-            recordManager = new CRM_RecordManager(service);
+            log = _log;
+            response = new ResponseObject();
         }
 
-        public string Execute(ExeucutionType executionType)
+        public ResponseObject Execute(ExeucutionType executionType)
         {
-            string response = "";
             if (executionType == ExeucutionType.InitialCreate)
             {
                 InsertToCrm();
@@ -45,133 +47,169 @@ namespace ConnectToCRM.Classes
 
             return response;
         }
-        public string InsertToCrm()
+        public void InsertToCrm()
         {
             try
             {
                 ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
                 
                 CreateNewrecords(organisationsCollection, exeReq);
-                ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(exeReq);
 
-                if (responseWithResults.IsFaulted == true)
+                log.LogInformation($"InsertToCrm creating {exeReq.Requests.Count} new records");
+                bool executedSuccessfuly = ExecuteRequests(exeReq);
+                if (executedSuccessfuly)
                 {
-                    return responseWithResults.Responses.FirstOrDefault().Fault.ToString();
-                }
-                else
-                {
-                    return "Creation Succesfull";
+                    log.LogInformation($"InsertToCrm Creation Succesfull");
+                    response.Message = "Creation Succesfull";
+                    response.InsertedCounter = exeReq.Requests.Count;
                 }
             }
             catch (Exception ex)
             {
-                return "ERROR:" + ex.Message;
+                response.Message = "ERROR:" + ex.Message;
             }
         }
 
-        public string UpdateToCRM()
+        public void UpdateToCRM()
         {
             try
             {
                 List<string> idMainList = organisationsCollection.Select(o => o.ConceptCodeId).ToList();
                 EntityCollection existingCRMRecords = QueryCRMForConceptCodeIds(idMainList);
+                log.LogInformation($"UpdateToCRM found {existingCRMRecords.Entities.Count} existing records in CRM");
 
                 ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
                 UpdateExistingRecords(existingCRMRecords, organisationsCollection, exeReq);
+                log.LogInformation($"UpdateToCRM updating {exeReq.Requests.Count} records in CRM");
 
-                ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(exeReq);
-                if (responseWithResults.IsFaulted == true)
+
+                bool executedSuccessfuly = ExecuteRequests(exeReq);
+                if (executedSuccessfuly)
                 {
-                    return responseWithResults.Responses.FirstOrDefault().Fault.ToString();
-                }
-                else
-                {
-                    return "Update Successful";
+                    log.LogInformation($"UpdateToCRM Update Succesfull");
+                    response.Message = "Update Succesfull";
+                    response.UpdatedCounter = exeReq.Requests.Count;
                 }
             }
             catch (Exception ex)
             {
-                return "ERROR:" + ex.Message;
+                response.Message = "ERROR:" + ex.Message;
             }
         }
-        public string UpsertToCRM()
+        public void UpsertToCRM()
         {
             try
             {
                 List<string> idMainList = organisationsCollection.Select(o => o.ConceptCodeId).ToList();
 
                 EntityCollection existingCRMRecords = QueryCRMForConceptCodeIds(idMainList);
+                log.LogInformation($"UpsertToCRM found {existingCRMRecords.Entities.Count} existing records in CRM");
+
                 List<string> existingOrgSubList = existingCRMRecords.Entities.Select(e => e.GetAttributeValue<string>("els_organizationid")).ToList();
                 var nonExistingOrgSubList = idMainList.Except(existingOrgSubList).ToList();
+                log.LogInformation($"UpsertToCRM {nonExistingOrgSubList.Count} are new to CRM");
 
                 ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
 
-                //if initial import was not done create all entities else do update logic
                 CreateNewrecords(organisationsCollection, nonExistingOrgSubList, exeReq);
                 UpdateExistingRecords(existingCRMRecords, organisationsCollection, exeReq);
+                log.LogInformation($"UpsertToCRM total insert and update requests: {exeReq.Requests.Count} ");
 
-                ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(exeReq);
-                if (responseWithResults.IsFaulted == true)
+                bool executedSuccessfuly = ExecuteRequests(exeReq);
+                if (executedSuccessfuly)
                 {
-                    return responseWithResults.Responses.FirstOrDefault().Fault.ToString();
+                    response.InsertedCounter = nonExistingOrgSubList.Count;
+                    response.UpdatedCounter = existingOrgSubList.Count;
+                    log.LogInformation($"UpsertToCRM Succesfull");
+                    response.Message = "UpsertToCRM Succesfull";
                 }
-                else
-                {
-                    return "Upsert Succesfull";
-                }
+
             }
             catch (Exception ex)
             {
-                return "ERROR:" + ex.Message;
+                response.Message = "ERROR:" + ex.Message;
+            }
+        }
+
+        public bool ExecuteRequests(ExecuteMultipleRequest exeReq)
+        {
+            try
+            {
+                ValidateCRMConnection();
+                ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(exeReq);
+                if (responseWithResults.IsFaulted == true)
+                {
+                    response.Message = responseWithResults.Responses.FirstOrDefault().Fault.ToString();
+                    return false;
+                }
+                else
+                {
+                    return true;
+                }
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
         public void CreateNewrecords(ICollection<ConceptCode> organisationsCollection, List<string> idList, ExecuteMultipleRequest exeReq)
         {
             int i = 1;
+            recordManager = new CRM_RecordManager(service, log);
             foreach (var idStr in idList)
             {
                 IEnumerable<ConceptCode> orgList = organisationsCollection.Where(o => o.ConceptCodeId == idStr);
                 ConceptCode org = orgList.FirstOrDefault();
+                log.LogInformation($"CreateNewrecords creating CreateRequest for : {org.ClassificationId} ");
+
                 Entity newCrmOrg = recordManager.CreateNewCRMRecord(org);
 
                 CreateRequest createRequest = new CreateRequest { Target = newCrmOrg };
                 exeReq.Requests.Add(createRequest);
-                if (i == 1)//execute few inserts
-                    break;
+                //if (i == 1)//execute few inserts
+                //    break;
             }
         }
         public void CreateNewrecords(ICollection<ConceptCode> organisationsCollection, ExecuteMultipleRequest exeReq)
         {
             int i = 1;
+            recordManager = new CRM_RecordManager(service, log);
             foreach (var org in organisationsCollection)
             {
+                log.LogInformation($"CreateNewrecords creating CreateRequest for : {org.ClassificationId} ");
+
                 Entity newCrmOrg = recordManager.CreateNewCRMRecord(org);
 
                 CreateRequest createRequest = new CreateRequest { Target = newCrmOrg };
                 exeReq.Requests.Add(createRequest);
-                if (i == 1)//execute few inserts
-                    break;
+                //if (i == 1)//execute few inserts
+                //    break;
             }
         }
         public void UpdateExistingRecords(EntityCollection existingOrganisations, ICollection<ConceptCode> organisationsCollection, ExecuteMultipleRequest exeReq)
         {
+            recordManager = new CRM_RecordManager(service, log);
             foreach (Entity existingOrg in existingOrganisations.Entities)
             {
                 var ConceptCodeId = existingOrg.GetAttributeValue<string>("els_organizationid");
                 var org = organisationsCollection.Where(c => c.ConceptCodeId.Equals(ConceptCodeId)).FirstOrDefault();
+                log.LogInformation($"UpdateExistingRecords creating UpdateRequest for : {org.ClassificationId} ");
+
                 recordManager.UpdateExistingCRMRecord(existingOrg, org);
 
                 UpdateRequest updateRequest = new UpdateRequest { Target = existingOrg };
                 exeReq.Requests.Add(updateRequest);
             }
         }
-        public static EntityCollection QueryCRMForConceptCodeIds(List<string> idMainList)
+        public EntityCollection QueryCRMForConceptCodeIds(List<string> idMainList)
         {
             EntityCollection result = new EntityCollection();
             var query = new QueryExpression("els_soteorganisaatiorekisteri");
             query.ColumnSet.AllColumns = true;
 
             query.Criteria.AddCondition("els_organizationid", ConditionOperator.In, idMainList.ToArray());
+
+            ValidateCRMConnection();
             var response = service.RetrieveMultiple(query);
             if (response != null)
             {
@@ -194,5 +232,42 @@ namespace ConnectToCRM.Classes
             return insertOrUpdateRequests;
         }
 
+        public void ValidateCRMConnection()
+        {
+            if (service is null)
+            {
+                ConnectToCRM();
+            }
+            if (!service.IsReady)
+            {
+                service.Dispose();
+                ConnectToCRM();
+            }
+        }
+        public string ConnectToCRM()
+        {
+            try
+            {
+                DataverseService dataverseService = new DataverseService();
+                service = dataverseService.CreateServiceClient();
+/*                if (service != null)
+                {
+                    QueryExpression qry = new QueryExpression("account");
+                    qry.ColumnSet = new ColumnSet(true);
+                    EntityCollection ecAccount = service.RetrieveMultiple(qry);
+                    if (ecAccount.Entities.Count > 0)
+                    {
+                        return $"Account Count: {ecAccount.Entities.Count}";
+                    }
+                }*/
+
+                return "Connection Succesfull";
+            }
+            catch (Exception ex)
+            {
+                return $"Error: {ex.Message}";
+
+            }
+        }
     }
 }

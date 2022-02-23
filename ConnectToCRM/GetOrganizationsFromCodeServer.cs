@@ -31,20 +31,21 @@ namespace ConnectToCRM
 
 
 
-        static ServiceClient service;
-        [FunctionName("GetSoteOrganizations")]
+        //static ServiceClient service;
+
+         [FunctionName("GetSoteOrganizations")]
         public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)] HttpRequest req, ILogger log)
         {
-            log.LogInformation("C# HTTP trigger function processed a request.");
-            RequestObject requestData = new RequestObject();
-            var resultMsg = string.Empty;
+            RequestObject requestData;
+            string resultMsg;
 
             try
             {
                 string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+                log.LogInformation($"GetSoteOrganizations Called with request: {requestBody}");
                 requestData = JsonConvert.DeserializeObject<RequestObject>(requestBody);
                 log.LogInformation("Request object parsed sucessfully");
-                resultMsg = ExecuteJob(requestData);
+                resultMsg = ExecuteJob(requestData, log);
             }
             catch(Exception ex)
             {
@@ -53,62 +54,45 @@ namespace ConnectToCRM
             return new OkObjectResult(resultMsg);
         }
 
-        public static string ExecuteJob(RequestObject requestData)
+        public static string ExecuteJob(RequestObject requestData, ILogger log)
         {
             if (string.IsNullOrEmpty(requestData.ClassificationId))
             {
+                log.LogInformation("ClassificationId must not be empty. Job aborted!");
                 return "ClassificationId must not be empty. Job aborted!";
             }
 
             try
             {
                 DataRetrieveManager retriever = new DataRetrieveManager(requestData);
-                var response = ConnectToCRM();
+                
                 string result = "Succes";
                 int pageNo = 1;
                 int totalPages = 0;
+                int insertRecordCouter = 0;
+                int updateRecordCouter = 0;
 
                 do
                 {
                     ConceptCodes organisations = retriever.GetOrganizations(pageNo);
-                    CRM_ImportManager mngr = new CRM_ImportManager(organisations.ConceptCodes1, service);
-                    mngr.Execute(requestData.ExecutionType);
+                    log.LogInformation($"Retrieved from codeserver: {organisations.TotalItems} records");
+                    log.LogInformation($"Sending to import page: {organisations.Page} with {organisations.ConceptCodes1.Count} records");
+                    CRM_ImportManager mngr = new CRM_ImportManager(organisations.ConceptCodes1, log);
+                    ResponseObject execResponse = mngr.Execute(requestData.ExecutionType);
 
                     totalPages = organisations.TotalPages;
                     pageNo++;
+                    insertRecordCouter += execResponse.InsertedCounter;
+                    updateRecordCouter += execResponse.UpdatedCounter;
                 } while (pageNo < totalPages && pageNo == 2);// remove && pageNo == 2
 
+                result = $"ExecuteJob processed {pageNo-1} pages out of {totalPages} pages with " +
+                    $"{insertRecordCouter} records inserted and {updateRecordCouter} records updated";
                 return result;
             }
             catch(Exception ex)
             {
                 return ex.Message;
-            }
-        }
-
-        public static string ConnectToCRM()
-        {
-            try
-            {
-                DataverseService dataverseService = new DataverseService();
-                service = dataverseService.CreateServiceClient();
-                if (service != null)
-                {
-                    QueryExpression qry = new QueryExpression("account");
-                    qry.ColumnSet = new ColumnSet(true);
-                    EntityCollection ecAccount = service.RetrieveMultiple(qry);
-                    if (ecAccount.Entities.Count > 0)
-                    {
-                        return $"Account Count: {ecAccount.Entities.Count}";
-                    }
-                }
-
-                return "Connection Succesfull";
-            }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-
             }
         }
 

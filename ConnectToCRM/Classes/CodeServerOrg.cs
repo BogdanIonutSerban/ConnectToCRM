@@ -688,6 +688,17 @@ namespace ConnectToCRM.Classes
         [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
         public ExeucutionType ExecutionType { get; set; }
     }
+    public partial class ResponseObject
+    {
+        [Newtonsoft.Json.JsonProperty("message", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Message { get; set; }
+
+        [Newtonsoft.Json.JsonProperty("updatedCounter")]
+        public int UpdatedCounter { get; set; }
+
+        [Newtonsoft.Json.JsonProperty("insertedCounter")]
+        public int InsertedCounter { get; set; }
+    }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "13.15.9.0 (NJsonSchema v10.6.8.0 (Newtonsoft.Json v11.0.0.0))")]
     public partial class ConceptCode
