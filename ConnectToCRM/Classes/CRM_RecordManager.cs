@@ -50,7 +50,9 @@ namespace ConnectToCRM.Classes
                     }
                     else if (attr.AttributeName == "Sijainti kunta")
                     {
-                        newOrg[mappings[attr.AttributeName]] = GetEntityByName("els_koodi", attr.AttributeValue.FirstOrDefault(), "els_koodinnimi", service);
+                        var values = attr.AttributeValue.FirstOrDefault().Split(" ");
+                        string tunnus = values[0];
+                        newOrg[mappings[attr.AttributeName]] = GetEntityByName("els_koodi", tunnus, "els_koodinnimi", service);
                     }
                     else
                     {
@@ -97,7 +99,9 @@ namespace ConnectToCRM.Classes
                     }
                     else if (attr.AttributeName == "Sijainti kunta")
                     {
-                        existingOrg[mappings[attr.AttributeName]] = GetEntityByName("els_koodi", attr.AttributeValue.FirstOrDefault(), "els_koodinnimi", service);
+                        var values = attr.AttributeValue.FirstOrDefault().Split(" ");
+                        string tunnus = values[0];
+                        existingOrg[mappings[attr.AttributeName]] = GetEntityByName("els_koodi", tunnus, "els_koodinnimi", service);
                     }
                     else
                     {
@@ -156,10 +160,10 @@ namespace ConnectToCRM.Classes
         }
 
         //Gets entity reference lookup based on the ConditionField 
-        public static EntityReference GetEntityByName(string entityName, string name, string conditionField, IOrganizationService service)
+        public static EntityReference GetEntityByName(string entityName, string conditionFieldValue, string conditionField, IOrganizationService service)
         {
             QueryExpression qryEntity = new QueryExpression(entityName);
-            qryEntity.Criteria.AddCondition(conditionField, ConditionOperator.Equal, name);
+            qryEntity.Criteria.AddCondition(conditionField, ConditionOperator.Equal, conditionFieldValue);
 
             EntityCollection ecEntity = service.RetrieveMultiple(qryEntity);
 
