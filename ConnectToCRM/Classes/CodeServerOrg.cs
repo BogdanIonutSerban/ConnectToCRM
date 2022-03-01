@@ -687,6 +687,9 @@ namespace ConnectToCRM.Classes
         [Newtonsoft.Json.JsonProperty("executionType")]
         [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
         public ExeucutionType ExecutionType { get; set; }
+
+        [Newtonsoft.Json.JsonProperty("batchSize")]
+        public int? BatchSize { get; set; }
     }
     public partial class ResponseObject
     {

@@ -16,16 +16,17 @@ namespace ConnectToCRM.Classes
     public class CRM_ImportManager
     {
         public ICollection<ConceptCode> organisationsCollection { get; private set; }
-        public static ServiceClient service { get; private set; }
+        public CRM_ServiceProvider serviceProvider { get; private set; }
         CRM_RecordManager recordManager;
         ILogger log;
         public ResponseObject response { get; private set; } 
 
-        public CRM_ImportManager(ICollection<ConceptCode> _collection, ILogger _log)
+        public CRM_ImportManager(ICollection<ConceptCode> _collection, CRM_ServiceProvider _serviceProvider, ILogger _log)
         {
             organisationsCollection = _collection;
             log = _log;
             response = new ResponseObject();
+            serviceProvider = _serviceProvider;
         }
 
         public ResponseObject Execute(ExeucutionType executionType)
@@ -135,7 +136,7 @@ namespace ConnectToCRM.Classes
         {
             try
             {
-                ValidateCRMConnection();
+                var service = serviceProvider.GetService();
                 ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(exeReq);
                 if (responseWithResults.IsFaulted == true)
                 {
@@ -154,7 +155,7 @@ namespace ConnectToCRM.Classes
         }
         public void CreateNewrecords(ICollection<ConceptCode> organisationsCollection, List<string> idList, ExecuteMultipleRequest exeReq)
         {
-            int i = 1;
+            var service = serviceProvider.GetService();
             recordManager = new CRM_RecordManager(service, log);
             foreach (var idStr in idList)
             {
@@ -172,7 +173,7 @@ namespace ConnectToCRM.Classes
         }
         public void CreateNewrecords(ICollection<ConceptCode> organisationsCollection, ExecuteMultipleRequest exeReq)
         {
-            int i = 1;
+            var service = serviceProvider.GetService();
             recordManager = new CRM_RecordManager(service, log);
             foreach (var org in organisationsCollection)
             {
@@ -188,6 +189,7 @@ namespace ConnectToCRM.Classes
         }
         public void UpdateExistingRecords(EntityCollection existingOrganisations, ICollection<ConceptCode> organisationsCollection, ExecuteMultipleRequest exeReq)
         {
+            var service = serviceProvider.GetService();
             recordManager = new CRM_RecordManager(service, log);
             foreach (Entity existingOrg in existingOrganisations.Entities)
             {
@@ -203,13 +205,13 @@ namespace ConnectToCRM.Classes
         }
         public EntityCollection QueryCRMForConceptCodeIds(List<string> idMainList)
         {
+            var service = serviceProvider.GetService();
             EntityCollection result = new EntityCollection();
             var query = new QueryExpression("els_soteorganisaatiorekisteri");
             query.ColumnSet.AllColumns = true;
 
             query.Criteria.AddCondition("els_organizationid", ConditionOperator.In, idMainList.ToArray());
 
-            ValidateCRMConnection();
             var response = service.RetrieveMultiple(query);
             if (response != null)
             {
@@ -232,42 +234,5 @@ namespace ConnectToCRM.Classes
             return insertOrUpdateRequests;
         }
 
-        public void ValidateCRMConnection()
-        {
-            if (service is null)
-            {
-                ConnectToCRM();
-            }
-            if (!service.IsReady)
-            {
-                service.Dispose();
-                ConnectToCRM();
-            }
-        }
-        public string ConnectToCRM()
-        {
-            try
-            {
-                DataverseService dataverseService = new DataverseService();
-                service = dataverseService.CreateServiceClient();
-/*                if (service != null)
-                {
-                    QueryExpression qry = new QueryExpression("account");
-                    qry.ColumnSet = new ColumnSet(true);
-                    EntityCollection ecAccount = service.RetrieveMultiple(qry);
-                    if (ecAccount.Entities.Count > 0)
-                    {
-                        return $"Account Count: {ecAccount.Entities.Count}";
-                    }
-                }*/
-
-                return "Connection Succesfull";
-            }
-            catch (Exception ex)
-            {
-                return $"Error: {ex.Message}";
-
-            }
-        }
     }
 }

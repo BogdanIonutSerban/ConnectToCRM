@@ -31,7 +31,7 @@ namespace ConnectToCRM.Classes
             {
                 if (mappings.ContainsKey(attr.AttributeName))
                 {
-                    Console.WriteLine("AttributeName:" + attr.AttributeName);
+                    //Console.WriteLine("AttributeName:" + attr.AttributeName);
                     if (attr.AttributeName == "Sektori")
                     {
                         newOrg[mappings[attr.AttributeName]] = GetSektoriOptionSetByLabel(attr.AttributeValue.FirstOrDefault());
@@ -80,7 +80,7 @@ namespace ConnectToCRM.Classes
             {
                 if (mappings.ContainsKey(attr.AttributeName))
                 {
-                    Console.WriteLine("AttributeName:" + attr.AttributeName);
+                    //Console.WriteLine("AttributeName:" + attr.AttributeName);
                     if (attr.AttributeName == "Sektori")
                     {
                         existingOrg[mappings[attr.AttributeName]] = GetSektoriOptionSetByLabel(attr.AttributeValue.FirstOrDefault());
