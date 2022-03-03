@@ -72,7 +72,7 @@ namespace ConnectToCRM
 
                 string result = "Succes";
                 int pageNo = CalculatePageNo(serviceProvider, configParamName) + 1;
-                int pageLimit = GetPageLimit(requestData, pageNo);
+                //int pageLimit = GetPageLimit(requestData, pageNo);
                 int totalPages = 0;
                 int insertRecordCouter = 0;
                 int updateRecordCouter = 0;
@@ -90,7 +90,7 @@ namespace ConnectToCRM
                     pageNo++;
                     insertRecordCouter += execResponse.InsertedCounter;
                     updateRecordCouter += execResponse.UpdatedCounter;
-                } while (pageNo < totalPages && pageNo < pageLimit);
+                } while (pageNo < totalPages);// && pageNo < pageLimit);
 
                 result = $"ExecuteJob processed {pageNo - 1} pages out of {totalPages} pages with " +
                     $"{insertRecordCouter} records inserted and {updateRecordCouter} records updated";
