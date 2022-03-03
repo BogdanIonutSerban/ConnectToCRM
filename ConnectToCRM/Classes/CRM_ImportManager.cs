@@ -161,7 +161,7 @@ namespace ConnectToCRM.Classes
             {
                 IEnumerable<ConceptCode> orgList = organisationsCollection.Where(o => o.ConceptCodeId == idStr);
                 ConceptCode org = orgList.FirstOrDefault();
-                log.LogInformation($"CreateNewrecords creating CreateRequest for : {org.ClassificationId} ");
+                log.LogInformation($"CreateNewrecords creating CreateRequest for : {org.ConceptCodeId} ");
 
                 Entity newCrmOrg = recordManager.CreateNewCRMRecord(org);
 
@@ -177,7 +177,7 @@ namespace ConnectToCRM.Classes
             recordManager = new CRM_RecordManager(service, log);
             foreach (var org in organisationsCollection)
             {
-                log.LogInformation($"CreateNewrecords creating CreateRequest for : {org.ClassificationId} ");
+                log.LogInformation($"CreateNewrecords creating CreateRequest for : {org.ConceptCodeId} ");
 
                 Entity newCrmOrg = recordManager.CreateNewCRMRecord(org);
 

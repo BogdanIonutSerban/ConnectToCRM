@@ -35,7 +35,7 @@ namespace ConnectToCRM
         //static ServiceClient service;
         static string configParamName = "PageNumber";
 
-         [FunctionName("GetSoteOrganizations")]
+        [FunctionName("GetSoteOrganizations")]
         public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)] HttpRequest req, ILogger log)
         {
             RequestObject requestData;
@@ -50,7 +50,7 @@ namespace ConnectToCRM
 
                 resultMsg = ExecuteJob(requestData, log);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 return new OkObjectResult("ERROR: " + ex.Message);
             }
@@ -71,7 +71,7 @@ namespace ConnectToCRM
                 CRM_ServiceProvider serviceProvider = new CRM_ServiceProvider();
 
                 string result = "Succes";
-                int pageNo = CalculatePageNo(serviceProvider, configParamName);
+                int pageNo = CalculatePageNo(serviceProvider, configParamName) + 1;
                 int pageLimit = GetPageLimit(requestData, pageNo);
                 int totalPages = 0;
                 int insertRecordCouter = 0;
@@ -86,17 +86,18 @@ namespace ConnectToCRM
                     ResponseObject execResponse = mngr.Execute(requestData.ExecutionType);
 
                     totalPages = organisations.TotalPages;
+                    UpdateLastProcessedPage(serviceProvider, pageNo);
                     pageNo++;
                     insertRecordCouter += execResponse.InsertedCounter;
                     updateRecordCouter += execResponse.UpdatedCounter;
                 } while (pageNo < totalPages && pageNo < pageLimit);
 
-                result = $"ExecuteJob processed {pageNo-1} pages out of {totalPages} pages with " +
+                result = $"ExecuteJob processed {pageNo - 1} pages out of {totalPages} pages with " +
                     $"{insertRecordCouter} records inserted and {updateRecordCouter} records updated";
-                UpdateLastProcessedPage(serviceProvider, pageNo - 1);
+                //UpdateLastProcessedPage(serviceProvider, pageNo - 1);
                 return result;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 return ex.Message;
             }
