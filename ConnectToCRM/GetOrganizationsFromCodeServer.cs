@@ -15,6 +15,7 @@ using ConnectToCRM.Classes;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xrm.Sdk.Messages;
+using ConnectToCRM.Enums;
 
 namespace ConnectToCRM
 {
@@ -64,15 +65,17 @@ namespace ConnectToCRM
                 log.LogInformation("ClassificationId must not be empty. Job aborted!");
                 return "ClassificationId must not be empty. Job aborted!";
             }
+            CRM_Logger crmLog = new CRM_Logger(requestData);
+            CRM_ServiceProvider serviceProvider = new CRM_ServiceProvider();
 
             try
             {
                 DataRetrieveManager retriever = new DataRetrieveManager(requestData);
-                CRM_ServiceProvider serviceProvider = new CRM_ServiceProvider();
+                crmLog.CreateLog(serviceProvider);
 
                 string result = "Succes";
                 int pageNo = CalculatePageNo(serviceProvider, configParamName) + 1;
-                //int pageLimit = GetPageLimit(requestData, pageNo);
+
                 int totalPages = 0;
                 int insertRecordCouter = 0;
                 int updateRecordCouter = 0;
@@ -92,17 +95,20 @@ namespace ConnectToCRM
                     pageNo++;
                     insertRecordCouter += execResponse.InsertedCounter;
                     updateRecordCouter += execResponse.UpdatedCounter;
-                } while (pageNo < totalPages);// && pageNo < pageLimit);
+
+                } while (pageNo < totalPages && pageNo<2);
 
                 result = $"ExecuteJob processed {pageNo - 1} pages out of {totalPages} pages with " +
                     $"{insertRecordCouter} records inserted and {updateRecordCouter} records updated";
                 //After execution is succesfull, update CRM parameter with 0
                 UpdateLastProcessedPage(serviceProvider, 0);
-                //UpdateLastProcessedPage(serviceProvider, pageNo - 1);
+                crmLog.UpdateLog(serviceProvider, result, (int)CRM_LogStatus.Finished);
+
                 return result;
             }
             catch (Exception ex)
             {
+                crmLog.UpdateLog(serviceProvider, ex.Message, (int)CRM_LogStatus.Failed);
                 return ex.Message;
             }
         }
@@ -131,6 +137,7 @@ namespace ConnectToCRM
             }
             return result;
         }
+
         public static void UpdateLastProcessedPage(CRM_ServiceProvider serviceProvider, int pageNo)
         {
             ExecuteMultipleRequest insertOrUpdateRequests = new ExecuteMultipleRequest()
