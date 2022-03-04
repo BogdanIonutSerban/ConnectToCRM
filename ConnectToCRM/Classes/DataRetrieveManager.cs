@@ -53,11 +53,19 @@ namespace ConnectToCRM.Classes
         WebSeviceCall GetWebserviceCall(WebServiceDefinition webServiceDefinition, int pageNo)
         {
             string modifiedAfterParam = string.Empty;
-            if (RequestData.ModifiedAfter != null && RequestData.ExecutionType == ExeucutionType.DailyUpsert)
+            if (RequestData.ExecutionType == ExeucutionType.DailyUpsert)
             {
-                var dateVal = (DateTimeOffset)RequestData.ModifiedAfter;
-                modifiedAfterParam = $"&modifiedAfter={dateVal:yyyy-MM-dd}";
+                if (RequestData.ModifiedAfter != null)
+                {
+                    var dateVal = (DateTimeOffset)RequestData.ModifiedAfter;
+                    modifiedAfterParam = $"&modifiedAfter={dateVal:yyyy-MM-dd}";
+                }
+                else{
+                    var dateVal = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd");
+                    modifiedAfterParam = $"&modifiedAfter=" + dateVal;
+                }
             }
+            
             WebSeviceCall webSeviceCall;
             try
             {

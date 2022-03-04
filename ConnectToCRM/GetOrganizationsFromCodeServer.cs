@@ -80,6 +80,8 @@ namespace ConnectToCRM
                 do
                 {
                     ConceptCodes organisations = retriever.GetOrganizations(pageNo);
+                    if (organisations == null)
+                        return "NO organizations Retrieved";
                     log.LogInformation($"Retrieved from codeserver: {organisations.TotalItems} records");
                     log.LogInformation($"Sending to import page: {organisations.Page} with {organisations.ConceptCodes1.Count} records");
                     CRM_ImportManager mngr = new CRM_ImportManager(organisations.ConceptCodes1, serviceProvider, log);
@@ -116,7 +118,7 @@ namespace ConnectToCRM
         }
         public static int CalculatePageNo(CRM_ServiceProvider serviceProvider, string keyName)
         {
-            int result = 1;
+            int result = 0;
             var param = GetConfigParamByKey(serviceProvider, keyName);
             if (param.Id != Guid.Empty)
             {
