@@ -94,6 +94,8 @@ namespace ConnectToCRM
 
                 result = $"ExecuteJob processed {pageNo - 1} pages out of {totalPages} pages with " +
                     $"{insertRecordCouter} records inserted and {updateRecordCouter} records updated";
+                //After execution is succesfull, update CRM parameter with 0
+                UpdateLastProcessedPage(serviceProvider, 0);
                 //UpdateLastProcessedPage(serviceProvider, pageNo - 1);
                 return result;
             }
