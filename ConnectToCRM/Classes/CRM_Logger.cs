@@ -1,48 +1,51 @@
-﻿using Microsoft.Xrm.Sdk;
+﻿using ConnectToCRM.Enums;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace ConnectToCRM.Classes
 {
     public class CRM_Logger
     {
-        string logId;
-        RequestObject requestData;
-        public CRM_Logger(RequestObject _requestData)
+        readonly string configParamName = "ImportLogRecordName";
+        public void Log(CRM_ServiceProvider serviceProvider, string details, CRM_LogStatus statusCode)
         {
-            requestData = _requestData;
-        }
-        public void CreateLog(CRM_ServiceProvider serviceProvider, string details = "")
-        {
-            ExecuteMultipleRequest insertOrUpdateRequests = GetMultipleRequest();
-            Entity logRecord = CreateLogRecord(requestData, details);
+            var configParam = CRM_HelperMethods.GetConfigParamByKey(serviceProvider, configParamName);
+            if (configParam.Id == Guid.Empty)
+            {
+                string exceptionMsg = $"Could not retrieve ConfigParameter record: {configParamName}! Update of SOTE-organisaatiorekisterin integraation tilanne aborted.";
+                throw new Exception(exceptionMsg);
+            }
+            string logRecordName = configParam.GetAttributeValue<string>("els_value");
 
-            CreateRequest createRequest = new CreateRequest { Target = logRecord };
-            insertOrUpdateRequests.Requests.Add(createRequest);
+            Entity logRecord = CRM_HelperMethods.GetLogRecordFromCRM(serviceProvider, logRecordName);
+            if (logRecord.Id == Guid.Empty)
+            {
+                string exceptionMsg = $"Could not retrieve the import log record: {logRecordName}! Update of SOTE-organisaatiorekisterin integraation tilanne aborted.";
+                throw new Exception(exceptionMsg);
+            }
+
+            ExecuteMultipleRequest insertOrUpdateRequests = GetMultipleRequest();
+
+            if (statusCode == CRM_LogStatus.Successful)
+            {
+                UpdateLogRecord_success(details, logRecord);
+            }
+
+            if (statusCode == CRM_LogStatus.Failed)
+            {
+                UpdateLogRecord_error(details, logRecord);
+            }
+
+            UpdateRequest updateRequest = new UpdateRequest { Target = logRecord };
+            insertOrUpdateRequests.Requests.Add(updateRequest);
 
             var service = serviceProvider.GetService();
             ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(insertOrUpdateRequests);
-            if (responseWithResults.IsFaulted == false)
-            {
-                logId = responseWithResults.Responses[0].Response["id"].ToString();
-            }
-        }
-        public void UpdateLog(CRM_ServiceProvider serviceProvider, string details, int statusCode)
-        {
-            if (!string.IsNullOrEmpty(logId))
-            {
-                ExecuteMultipleRequest insertOrUpdateRequests = GetMultipleRequest();
-                Entity logRecord = UpdateLogRecord(details, statusCode);
-
-                UpdateRequest updateRequest = new UpdateRequest { Target = logRecord };
-                insertOrUpdateRequests.Requests.Add(updateRequest);
-
-                var service = serviceProvider.GetService();
-                ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(insertOrUpdateRequests);
-            }
-
         }
         ExecuteMultipleRequest GetMultipleRequest()
         {
@@ -56,24 +59,16 @@ namespace ConnectToCRM.Classes
                 Requests = new OrganizationRequestCollection()
             };
         }
-        Entity CreateLogRecord(RequestObject requestData, string details)
+        void UpdateLogRecord_success (string details, Entity logRecord)
         {
-            string logName = $"{requestData.ExecutionType}_{DateTime.Now.ToShortDateString()}_{DateTime.Now.ToShortTimeString()}";
-            Entity rec = new Entity("els_codeserver_importlog");
-            rec.Attributes.Add("els_name", logName);
-            //rec.Attributes.Add("els_details", details);
-
-            return rec;
+            logRecord["els_successfullyimporteddate"] = DateTime.Now;
+            logRecord["els_successfullylog"] = details;
         }
-        Entity UpdateLogRecord (string details, int statuscode)
+        void UpdateLogRecord_error(string details, Entity logRecord)
         {
-            Entity rec = new Entity("els_codeserver_importlog");
-            rec.Id = new Guid(logId);
-            rec.Attributes.Add("statecode", new OptionSetValue(1));
-            rec.Attributes.Add("statuscode", new OptionSetValue(statuscode));
-            rec.Attributes.Add("els_details", details);
+            logRecord["els_faileddate"] = DateTime.Now;
+            logRecord["els_failedlog"] = details;
 
-            return rec;
         }
     }
 }

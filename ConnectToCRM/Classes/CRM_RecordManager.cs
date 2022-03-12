@@ -31,22 +31,17 @@ namespace ConnectToCRM.Classes
             {
                 if (mappings.ContainsKey(attr.AttributeName))
                 {
-                    //Console.WriteLine("AttributeName:" + attr.AttributeName);
                     if (attr.AttributeName == "Sektori")
                     {
                         newOrg[mappings[attr.AttributeName]] = GetSektoriOptionSetByLabel(attr.AttributeValue.FirstOrDefault());
                     }
                     else if (attr.AttributeName == "Sos.palveluyksikkö" || attr.AttributeName == "Sos.toimintayksikkö" || attr.AttributeName == "Terv.palveluyksikkö")
                     {
-                        //get values for boolean fields
                         newOrg[mappings[attr.AttributeName]] = GetBooleanFromString(attr.AttributeValue.FirstOrDefault());
-
                     }
                     else if (attr.AttributeName == "ParentId")
                     {
                         newOrg[mappings[attr.AttributeName]] = GetEntityByName("els_soteorganisaatiorekisteri", attr.AttributeValue.FirstOrDefault(), "els_organizationid", service);
-
-
                     }
                     else if (attr.AttributeName == "Sijainti kunta")
                     {
@@ -70,10 +65,13 @@ namespace ConnectToCRM.Classes
             var longName = attributes.Where(c => c.AttributeName.Equals("LongName"));
 
             var parentId = attributes.Where(c => c.AttributeName.Equals("ParentId"));
-            Entity parentRec = GetConceptCodeRef_ByConceptCodeID(parentId.First().AttributeValue.FirstOrDefault());
-            if (parentRec.Id != Guid.Empty)
+            if (parentId.Any())
             {
-                existingOrg["els_parentid"] = parentRec.ToEntityReference();
+                Entity parentRec = GetConceptCodeRef_ByConceptCodeID(parentId.First().AttributeValue.FirstOrDefault());
+                if (parentRec.Id != Guid.Empty)
+                {
+                    existingOrg["els_parentid"] = parentRec.ToEntityReference();
+                }
             }
             Dictionary<string, string> mappings = GetMappings();
             foreach (var attr in retrievedOrg.Attributes)

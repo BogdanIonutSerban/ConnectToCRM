@@ -65,13 +65,13 @@ namespace ConnectToCRM
                 log.LogInformation("ClassificationId must not be empty. Job aborted!");
                 return "ClassificationId must not be empty. Job aborted!";
             }
-            CRM_Logger crmLog = new CRM_Logger(requestData);
+            CRM_Logger crmLog = new CRM_Logger();
             CRM_ServiceProvider serviceProvider = new CRM_ServiceProvider();
+            CRM_HelperMethods.UpdateModifiedAfterParam_FromCRM(serviceProvider, requestData, "ImportLogRecordName");
 
             try
             {
                 DataRetrieveManager retriever = new DataRetrieveManager(requestData);
-                crmLog.CreateLog(serviceProvider);
 
                 string result = "Succes";
                 int pageNo = CalculatePageNo(serviceProvider, configParamName) + 1;
@@ -102,13 +102,13 @@ namespace ConnectToCRM
                     $"{insertRecordCouter} records inserted and {updateRecordCouter} records updated";
                 //After execution is succesfull, update CRM parameter with 0
                 UpdateLastProcessedPage(serviceProvider, 0);
-                crmLog.UpdateLog(serviceProvider, result, (int)CRM_LogStatus.Finished);
+                crmLog.Log(serviceProvider, result, CRM_LogStatus.Successful);
 
                 return result;
             }
             catch (Exception ex)
             {
-                crmLog.UpdateLog(serviceProvider, ex.Message, (int)CRM_LogStatus.Failed);
+                crmLog.Log(serviceProvider, ex.Message, CRM_LogStatus.Failed);
                 return ex.Message;
             }
         }
@@ -125,7 +125,7 @@ namespace ConnectToCRM
         public static int CalculatePageNo(CRM_ServiceProvider serviceProvider, string keyName)
         {
             int result = 0;
-            var param = GetConfigParamByKey(serviceProvider, keyName);
+            var param = CRM_HelperMethods.GetConfigParamByKey(serviceProvider, keyName);
             if (param.Id != Guid.Empty)
             {
                 var resultTxt = param.GetAttributeValue<string>("els_value");
@@ -150,7 +150,7 @@ namespace ConnectToCRM
                 Requests = new OrganizationRequestCollection()
             };
 
-            var param = GetConfigParamByKey(serviceProvider, configParamName);
+            var param = CRM_HelperMethods.GetConfigParamByKey(serviceProvider, configParamName);
             param["els_value"] = pageNo.ToString();
 
             var service = serviceProvider.GetService();
@@ -158,33 +158,13 @@ namespace ConnectToCRM
             {
                 UpdateRequest updateRequest = new UpdateRequest { Target = param };
                 insertOrUpdateRequests.Requests.Add(updateRequest);
-                //service.Update(param);
             }
             else
             {
                 CreateRequest createRequest = new CreateRequest { Target = param };
                 insertOrUpdateRequests.Requests.Add(createRequest);
-                //service.Create(param);
             }
             ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(insertOrUpdateRequests);
-        }
-        public static Entity GetConfigParamByKey(CRM_ServiceProvider serviceProvider, string keyName)
-        {
-            var service = serviceProvider.GetService();
-            Entity result = new Entity("els_configurationparameter");
-            var query = new QueryExpression("els_configurationparameter")
-            {
-                ColumnSet = new ColumnSet("els_value")
-            };
-
-            query.Criteria.AddCondition("els_name", ConditionOperator.Equal, keyName);
-
-            var response = service.RetrieveMultiple(query);
-            if (response != null && response.Entities.Any())
-            {
-                result = response.Entities.First();
-            }
-            return result;
         }
 
     }
