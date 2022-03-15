@@ -26,6 +26,17 @@ namespace ConnectToCRM.Classes
             newOrg["els_organizationid"] = retrievedOrg.ConceptCodeId;
             newOrg["els_beginningdate"] = retrievedOrg.BeginDate.DateTime;
             newOrg["els_expiringdate"] = retrievedOrg.ExpirationDate.DateTime;
+            var attributes = retrievedOrg.Attributes.ToList();
+            var parentId = attributes.Where(c => c.AttributeName.Equals("ParentId"));
+            Entity parentRec = GetConceptCodeRef_ByConceptCodeID(parentId.First().AttributeValue.FirstOrDefault());
+            if (parentRec.Id != Guid.Empty)
+            {
+                newOrg["els_hierarchylevel"] = CalculateHierarchyLevel(parentRec, service, log);
+            }
+            else
+            {
+                newOrg["els_hierarchylevel"] = 0;
+            }
             Dictionary<string, string> mappings = GetMappings();
             foreach (var attr in retrievedOrg.Attributes)
             {
@@ -45,8 +56,6 @@ namespace ConnectToCRM.Classes
                     else if (attr.AttributeName == "ParentId")
                     {
                         newOrg[mappings[attr.AttributeName]] = GetEntityByName("els_soteorganisaatiorekisteri", attr.AttributeValue.FirstOrDefault(), "els_organizationid", service);
-
-
                     }
                     else if (attr.AttributeName == "Sijainti kunta")
                     {
@@ -75,12 +84,12 @@ namespace ConnectToCRM.Classes
             {
                 existingOrg["els_parentid"] = parentRec.ToEntityReference();
             }
+
             Dictionary<string, string> mappings = GetMappings();
             foreach (var attr in retrievedOrg.Attributes)
             {
                 if (mappings.ContainsKey(attr.AttributeName))
                 {
-                    //Console.WriteLine("AttributeName:" + attr.AttributeName);
                     if (attr.AttributeName == "Sektori")
                     {
                         existingOrg[mappings[attr.AttributeName]] = GetSektoriOptionSetByLabel(attr.AttributeValue.FirstOrDefault());
@@ -117,7 +126,7 @@ namespace ConnectToCRM.Classes
         {
             Entity result = new Entity();
             var query = new QueryExpression("els_soteorganisaatiorekisteri");
-            query.ColumnSet = new ColumnSet("els_organizationid");
+            query.ColumnSet = new ColumnSet("els_organizationid", "els_parentid");
 
             query.Criteria.AddCondition("els_organizationid", ConditionOperator.Equal, conceptCodeID);
             var response = service.RetrieveMultiple(query);
@@ -159,6 +168,28 @@ namespace ConnectToCRM.Classes
             return false;
         }
 
+        private static int CalculateHierarchyLevel(Entity parentEntity, ServiceClient service, ILogger log)
+        {
+            int hierarchyLevel = 1;
+            EntityReference parent = (EntityReference)parentEntity["els_parentid"];
+            string parentId = parent.Id.ToString();
+            while (1 == 1)
+            {
+                Entity parentEnt = service.Retrieve(parent.LogicalName, Guid.Parse(parentId), new ColumnSet("els_parentid"));
+                if (parentEntity.Contains("els_parentid") && parentEntity["els_parentid"] != null)
+                {
+                    hierarchyLevel++;
+                    parentId = ((EntityReference)parentEntity["els_parentid"]).Id.ToString();
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return hierarchyLevel;
+
+        }
         //Gets entity reference lookup based on the ConditionField 
         public static EntityReference GetEntityByName(string entityName, string conditionFieldValue, string conditionField, IOrganizationService service)
         {
