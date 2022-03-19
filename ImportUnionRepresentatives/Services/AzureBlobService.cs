@@ -9,12 +9,13 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace ImportUnionRepresentatives.Services
 {
     public class AzureBlobService
     {
-        public List<UnionRepresentativeContainer> GetFileFromAzure(string containerName, string fileName)
+        public string GetFileFromAzure(string containerName, string fileName)
         {
             string connectionString = $"DefaultEndpointsProtocol=https;AccountName=elslaakariliittoprocount;AccountKey=79+g28gQr3hb/5tcwWDJ7F5s5ZKgClB66HrtGL8QuRfvwrpz9qWSDoamrrseChqtrNTX/kxB7yvfOEhcFayFzg==;EndpointSuffix=core.windows.net";
 
@@ -30,7 +31,7 @@ namespace ImportUnionRepresentatives.Services
 
             // Get the blob file as text
             string contents = blob.DownloadTextAsync().Result;
-            List<UnionRepresentativeContainer> results = new List<UnionRepresentativeContainer>();
+/*            List<UnionRepresentativeContainer> results = new List<UnionRepresentativeContainer>();
 
             using (var stream = new MemoryStream())
             {
@@ -45,10 +46,10 @@ namespace ImportUnionRepresentatives.Services
                         var result = serializer.Deserialize(jsonTextReader);
                     }
                 }
-            }
+            }*/
 
 
-            return results;
+            return contents;
         }
     }
 }

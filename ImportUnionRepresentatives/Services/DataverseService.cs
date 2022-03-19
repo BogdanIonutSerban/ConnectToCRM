@@ -16,6 +16,7 @@ namespace ConnectToCRM.Services
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
             ServiceClient service = new ServiceClient($"AuthType=ClientSecret;ClientId=905a40cd-3aa7-42e6-82cf-4ff6c9d53962;ClientSecret=ALg7Q~cJuwXkErHEo3hy5CIrQiSy54lvsCRGt;Url=https://aapelitest.crm4.dynamics.com");
+            //
             if (!service.IsReady)
             {
                 return null;
