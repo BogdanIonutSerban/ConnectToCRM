@@ -1,15 +1,5 @@
-﻿using Azure.Storage.Blobs.Models;
-using CsvHelper;
-using ImportUnionRepresentatives.Classes;
-using Microsoft.WindowsAzure.Storage;
+﻿using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
-using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ImportUnionRepresentatives.Services
 {

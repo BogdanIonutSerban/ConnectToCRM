@@ -31,4 +31,12 @@ namespace ConnectToCRM.Enums
         Failed = 2
     }
 
+    public enum TEHTAVA
+    {
+        PLM = 861120000,
+        VPLM = 861120002,
+        LM = 861120001,
+        VLM = 861120004,
+        LV = 861120003
+    }
 }

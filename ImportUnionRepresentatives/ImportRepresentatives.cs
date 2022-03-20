@@ -16,6 +16,8 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using System.Linq;
 using Microsoft.Xrm.Sdk.Messages;
+using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace ImportUnionRepresentatives
 {
@@ -71,7 +73,8 @@ namespace ImportUnionRepresentatives
             string[] allRows = fileContent.Split('\n');
             for (int i = 0; i < allRows.Length - 1; i++)
             {
-                string[] rowValues = allRows[i].Split(',');
+                Regex csvParser = new Regex(",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))");
+                string[] rowValues = csvParser.Split(allRows[i]);
                 if (i==0)
                 {
                     for (int j = 0; j < rowValues.Length; j++)
@@ -100,6 +103,7 @@ namespace ImportUnionRepresentatives
         {
             int tempLimit = 0;
             ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
+            Dictionary<string, string> mappings = GetMappings();
             foreach (DataRow row in table.Rows)
             {
                 if (tempLimit == 10)
@@ -108,6 +112,7 @@ namespace ImportUnionRepresentatives
                 }
                 var recKey = row["hetu"].ToString();
                 Entity record = GetLuottamusmiesRecord(recKey, serviceProvider);
+
                 foreach (DataColumn column in table.Columns)
                 {
                     string columnName = column.ColumnName;
@@ -125,7 +130,25 @@ namespace ImportUnionRepresentatives
                         }
                     }
                 }
+                #region Mappings
+                record.Attributes.Add("els_luottamusmiesnimi", row["yrityksen_nimi"].ToString() + " " + row["etunimi"].ToString() + " " + row["sukunimi"].ToString());
+                record.Attributes.Add("els_jasenjarjesto", row["jasenjarjesto"].ToString());
+                record.Attributes.Add("els_alkupaivamaara", DateTime.ParseExact(row["alkupvm"].ToString(), "yyyyMMdd", CultureInfo.InvariantCulture));
+                record.Attributes.Add("els_paattymispaivamaara", DateTime.ParseExact(row["loppupvm"].ToString(), "yyyyMMdd", CultureInfo.InvariantCulture));
+                record.Attributes.Add("els_luottamustehtava", new OptionSetValue(GetTehtavaOptionSetValue(row["tehtava"].ToString())));
+                if (row["paatoiminen"].ToString() == "E") {
+                    record.Attributes.Add("els_paatoiminen", false); 
+                }
+                else
+                {
+                    record.Attributes.Add("els_paatoiminen", true);
+                }
+                record.Attributes.Add("els_sopimusalat", row["sopimusalat"].ToString());
+                record.Attributes.Add("els_sektori", row["yrityksen_sektori"].ToString());
+                record.Attributes.Add("els_juko_id", row["ID\r"].ToString().Replace("\r",""));
+                //record.Attributes.Add("els_soteorganisaatio", GetRecord("els_soteorganisaatiorekisteri", row["yrityksen_jukon_tunniste"].ToString(), "els_organizationid", serviceProvider.GetService());
 
+                #endregion
 
                 if (record.Id == Guid.Empty)
                 {
@@ -141,7 +164,6 @@ namespace ImportUnionRepresentatives
             }
             return exeReq;
         }
-
         public static Entity GetLuottamusmiesRecord(string recKey, CRM_ServiceProvider serviceProvider)
         {
             Entity response = new Entity("els_luottamusmies");
@@ -174,7 +196,6 @@ namespace ImportUnionRepresentatives
 
             return mappings;
         }
-
         public static bool ExecuteRequests(ExecuteMultipleRequest exeReq, CRM_ServiceProvider serviceProvider)
         {
             try
@@ -237,5 +258,31 @@ namespace ImportUnionRepresentatives
             };
             return insertOrUpdateRequests;
         }
+        private static int GetTehtavaOptionSetValue(string tehtava)
+        {
+            int value = 861120000;
+            switch (tehtava)
+            {
+                case "PLM":
+                    value = (int)TEHTAVA.PLM;
+                    break;
+                case "VPLM":
+                    value = (int)TEHTAVA.VPLM;
+                    break;
+                case "LM":
+                    value = (int)TEHTAVA.LM;
+                    break;
+                case "VLM":
+                    value = (int)TEHTAVA.VLM;
+                    break;
+                case "LV":
+                    value = (int)TEHTAVA.LV;
+                    break;
+                default:
+                    break;
+            }
+            return value;
+        }
+
     }
 }
