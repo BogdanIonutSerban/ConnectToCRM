@@ -17,18 +17,12 @@ namespace ConnectToCRM.Enums
         PUT = 2,
         PATCH = 3,
         DELETE = 4
-    }   
-/*    public enum CRM_LogStatus
-    {
-        Running = 1,
-        Finished = 2,
-        Failed = 861120000
-    } 
-*/    
+    }
+
     public enum CRM_LogStatus
     {
         Successful = 1,
-        Failed = 2
+        Failed = 861120000
     }
 
     public enum TEHTAVA

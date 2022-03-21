@@ -45,39 +45,46 @@ namespace ImportUnionRepresentatives
         {
             CRM_Logger crmLog = new CRM_Logger();
             CRM_ServiceProvider serviceProvider = new CRM_ServiceProvider();
+            AzureBlobService az = new AzureBlobService();
 
             try
             {               
                 string result = "Succes";
-                AzureBlobService az = new AzureBlobService();
                 var fileString = az.GetFileFromAzure("union-representatives", "Representatives.csv");
-                var table = ConvertToDatatable(fileString);
-                var reqList = ProcessDataTableContent(table, serviceProvider);
+                var table = ConvertToDatatable(fileString, crmLog);
+                var reqList = ProcessDataTableContent(table, crmLog, serviceProvider);
 
-                string executedSuccessfuly = ExecuteRequests(reqList, serviceProvider, crmLog);
-                if(executedSuccessfuly != "OK")
+                string executedSuccessfuly = ExecuteRequests(reqList, serviceProvider);
+                if (executedSuccessfuly != "OK")
                 {
                     result = executedSuccessfuly;
-                    crmLog.Log(serviceProvider, executedSuccessfuly, CRM_LogStatus.Failed);
+                    crmLog.AddDetailInfo($"Execution ended at {DateTime.Now}, with following result: {result}");
+                    crmLog.Log(serviceProvider, CRM_LogStatus.Failed);
+
+                    az.MoveProcessedFileToArchive("union-representatives", "union-representatives-failed", "Representatives.csv");
                     return result;
                 }
                 az.MoveProcessedFileToArchive("union-representatives", "union-representatives-archive", "Representatives.csv");
-                crmLog.Log(serviceProvider, result, CRM_LogStatus.Successful);
+                crmLog.AddDetailInfo($"Execution ended at {DateTime.Now}, with following result: {result}");
+                crmLog.Log(serviceProvider, CRM_LogStatus.Successful);
 
                 return result;
             }
             catch (Exception ex)
             {
-                crmLog.Log(serviceProvider, ex.Message, CRM_LogStatus.Failed);
+                crmLog.AddDetailInfo(ex.Message);
+                crmLog.Log(serviceProvider, CRM_LogStatus.Failed);
+                az.MoveProcessedFileToArchive("union-representatives", "union-representatives-failed", "Representatives.csv");
                 return ex.Message;
             }
         }
-        public static DataTable ConvertToDatatable(string fileContent)
+        public static DataTable ConvertToDatatable(string fileContent, CRM_Logger crmLog)
         {
             DataTable resultTable = new DataTable();
             string[] allRows = fileContent.Split('\n');
             for (int i = 0; i < allRows.Length - 1; i++)
             {
+                crmLog.NoOfRecordsFound = allRows.Length - 1;
                 Regex csvParser = new Regex(",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))");
                 string[] rowValues = csvParser.Split(allRows[i]);
                 if (i==0)
@@ -104,24 +111,26 @@ namespace ImportUnionRepresentatives
 
             return resultTable;
         }
-        public static List<ExecuteMultipleRequest> ProcessDataTableContent(DataTable table, CRM_ServiceProvider serviceProvider)
+        public static List<ExecuteMultipleRequest> ProcessDataTableContent(DataTable table, CRM_Logger crmLog, CRM_ServiceProvider serviceProvider)
         {
-            int tempLimit = 0;
+            int updatesCounter = 0;
+            int insertsCounter = 0;
+            int batchLimit = 0;
             List<ExecuteMultipleRequest> multipleReqList = new List<ExecuteMultipleRequest>();
             ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
             Dictionary<string, string> mappings = GetMappings();
             foreach (DataRow row in table.Rows)
             {
-                if(tempLimit % 200 == 0)
+                if(batchLimit % 200 == 0)
                 {
                     multipleReqList.Add(exeReq);
                     exeReq.Requests.Clear();
                 }
                 //if commented do full import
-                //if (tempLimit == 10)
-                //{
-                //    break;
-                //}
+                if (batchLimit == 205)
+                {
+                    break;
+                }
                 var recKey = row["hetu"].ToString();
                 Entity record = GetLuottamusmiesRecord(recKey, serviceProvider);
 
@@ -138,7 +147,8 @@ namespace ImportUnionRepresentatives
                         }
                         else
                         {
-                            //LogEvent
+                            var info = $"No Contact was found for Representative {row["sukunimi"]} {row["etunimi"]}";
+                            crmLog.AddDetailInfo(info);
                         }
                     }
                 }
@@ -168,14 +178,17 @@ namespace ImportUnionRepresentatives
                 {
                     CreateRequest createRequest = new CreateRequest { Target = record };
                     exeReq.Requests.Add(createRequest);
+                    insertsCounter++;
                 }
                 else
                 {
                     UpdateRequest updateRequest = new UpdateRequest { Target = record };
                     exeReq.Requests.Add(updateRequest);
+                    updatesCounter++;
                 }
-                tempLimit++;
+                batchLimit++;
             }
+            crmLog.AddDetailInfo($"This session were inserted {insertsCounter} records and updated {updatesCounter}");
             return multipleReqList;
         }
         public static Entity GetLuottamusmiesRecord(string recKey, CRM_ServiceProvider serviceProvider)
@@ -210,7 +223,7 @@ namespace ImportUnionRepresentatives
 
             return mappings;
         }
-        public static string ExecuteRequests(List<ExecuteMultipleRequest> reqList, CRM_ServiceProvider serviceProvider, CRM_Logger crmLog)
+        public static string ExecuteRequests(List<ExecuteMultipleRequest> reqList, CRM_ServiceProvider serviceProvider)
         {
             try
             {
