@@ -52,10 +52,15 @@ namespace ImportUnionRepresentatives
                 AzureBlobService az = new AzureBlobService();
                 var fileString = az.GetFileFromAzure("union-representatives", "Representatives.csv");
                 var table = ConvertToDatatable(fileString);
-                var exeReq = ProcessDataTableContent(table, serviceProvider);
+                var reqList = ProcessDataTableContent(table, serviceProvider);
 
-                bool executedSuccessfuly = ExecuteRequests(exeReq, serviceProvider);
-
+                string executedSuccessfuly = ExecuteRequests(reqList, serviceProvider, crmLog);
+                if(executedSuccessfuly != "OK")
+                {
+                    result = executedSuccessfuly;
+                    crmLog.Log(serviceProvider, executedSuccessfuly, CRM_LogStatus.Failed);
+                    return result;
+                }
                 az.MoveProcessedFileToArchive("union-representatives", "union-representatives-archive", "Representatives.csv");
                 crmLog.Log(serviceProvider, result, CRM_LogStatus.Successful);
 
@@ -99,13 +104,19 @@ namespace ImportUnionRepresentatives
 
             return resultTable;
         }
-        public static ExecuteMultipleRequest ProcessDataTableContent(DataTable table, CRM_ServiceProvider serviceProvider)
+        public static List<ExecuteMultipleRequest> ProcessDataTableContent(DataTable table, CRM_ServiceProvider serviceProvider)
         {
             int tempLimit = 0;
+            List<ExecuteMultipleRequest> multipleReqList = new List<ExecuteMultipleRequest>();
             ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
             Dictionary<string, string> mappings = GetMappings();
             foreach (DataRow row in table.Rows)
             {
+                if(tempLimit % 200 == 0)
+                {
+                    multipleReqList.Add(exeReq);
+                    exeReq.Requests.Clear();
+                }
                 //if commented do full import
                 //if (tempLimit == 10)
                 //{
@@ -149,7 +160,7 @@ namespace ImportUnionRepresentatives
                 record.Attributes.Add("els_sopimusalat", row["sopimusalat"].ToString());
                 record.Attributes.Add("els_sektori", row["yrityksen_sektori"].ToString());
                 record.Attributes.Add("els_juko_id", row["ID\r"].ToString().Replace("\r",""));
-                record.Attributes.Add("els_soteorganisaatio", GetSoteOrganization("els_soteorganisaatiorekisteri", row["yrityksen_jukon_tunniste"].ToString(), "els_ytunnus", serviceProvider.GetService()));
+                record.Attributes.Add("els_soteorganisaatio", GetSoteOrganization("els_soteorganisaatiorekisteri", row["yrityksen_ytunnus"].ToString(), "els_ytunnus", serviceProvider.GetService()));
 
                 #endregion
 
@@ -165,7 +176,7 @@ namespace ImportUnionRepresentatives
                 }
                 tempLimit++;
             }
-            return exeReq;
+            return multipleReqList;
         }
         public static Entity GetLuottamusmiesRecord(string recKey, CRM_ServiceProvider serviceProvider)
         {
@@ -199,25 +210,20 @@ namespace ImportUnionRepresentatives
 
             return mappings;
         }
-        public static bool ExecuteRequests(ExecuteMultipleRequest exeReq, CRM_ServiceProvider serviceProvider)
+        public static string ExecuteRequests(List<ExecuteMultipleRequest> reqList, CRM_ServiceProvider serviceProvider, CRM_Logger crmLog)
         {
             try
             {
                 var service = serviceProvider.GetService();
-                ExecuteMultipleResponse responseWithResults = (ExecuteMultipleResponse)service.Execute(exeReq);
-                if (responseWithResults.IsFaulted == true)
+                foreach (var request in reqList)
                 {
-                    string msg = responseWithResults.Responses.FirstOrDefault().Fault.ToString();
-                    return false;
+                    service.Execute(request);
                 }
-                else
-                {
-                    return true;
-                }
+                return "OK";
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return false;
+                return "Error:" + ex.Message;
             }
         }
         public static Entity GetLuottamusmiesRecordFromCRM(string fieldValue, IOrganizationService service)
