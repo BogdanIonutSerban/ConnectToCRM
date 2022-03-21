@@ -32,7 +32,6 @@ namespace ImportUnionRepresentatives
 
             try
             {
-
                 resultMsg = ExecuteJob(log);
             }
             catch (Exception ex)
@@ -48,7 +47,7 @@ namespace ImportUnionRepresentatives
             CRM_ServiceProvider serviceProvider = new CRM_ServiceProvider();
 
             try
-            {
+            {               
                 string result = "Succes";
                 AzureBlobService az = new AzureBlobService();
                 var fileString = az.GetFileFromAzure("union-representatives", "Representatives.csv");
@@ -57,6 +56,7 @@ namespace ImportUnionRepresentatives
 
                 bool executedSuccessfuly = ExecuteRequests(exeReq, serviceProvider);
 
+                az.MoveProcessedFileToArchive("union-representatives", "union-representatives-archive", "Representatives.csv");
                 crmLog.Log(serviceProvider, result, CRM_LogStatus.Successful);
 
                 return result;
@@ -106,10 +106,11 @@ namespace ImportUnionRepresentatives
             Dictionary<string, string> mappings = GetMappings();
             foreach (DataRow row in table.Rows)
             {
-                if (tempLimit == 10)
-                {
-                    break;
-                }
+                //if commented do full import
+                //if (tempLimit == 10)
+                //{
+                //    break;
+                //}
                 var recKey = row["hetu"].ToString();
                 Entity record = GetLuottamusmiesRecord(recKey, serviceProvider);
 
@@ -133,8 +134,10 @@ namespace ImportUnionRepresentatives
                 #region Mappings
                 record.Attributes.Add("els_luottamusmiesnimi", row["yrityksen_nimi"].ToString() + " " + row["etunimi"].ToString() + " " + row["sukunimi"].ToString());
                 record.Attributes.Add("els_jasenjarjesto", row["jasenjarjesto"].ToString());
-                record.Attributes.Add("els_alkupaivamaara", DateTime.ParseExact(row["alkupvm"].ToString(), "yyyyMMdd", CultureInfo.InvariantCulture));
-                record.Attributes.Add("els_paattymispaivamaara", DateTime.ParseExact(row["loppupvm"].ToString(), "yyyyMMdd", CultureInfo.InvariantCulture));
+                if(row["alkupvm"].ToString() != string.Empty)
+                    record.Attributes.Add("els_alkupaivamaara", DateTime.ParseExact(row["alkupvm"].ToString(), "yyyyMMdd", CultureInfo.InvariantCulture));
+                if (row["loppupvm"].ToString() != string.Empty)
+                    record.Attributes.Add("els_paattymispaivamaara", DateTime.ParseExact(row["loppupvm"].ToString(), "yyyyMMdd", CultureInfo.InvariantCulture));
                 record.Attributes.Add("els_luottamustehtava", new OptionSetValue(GetTehtavaOptionSetValue(row["tehtava"].ToString())));
                 if (row["paatoiminen"].ToString() == "E") {
                     record.Attributes.Add("els_paatoiminen", false); 
@@ -146,7 +149,7 @@ namespace ImportUnionRepresentatives
                 record.Attributes.Add("els_sopimusalat", row["sopimusalat"].ToString());
                 record.Attributes.Add("els_sektori", row["yrityksen_sektori"].ToString());
                 record.Attributes.Add("els_juko_id", row["ID\r"].ToString().Replace("\r",""));
-                //record.Attributes.Add("els_soteorganisaatio", GetRecord("els_soteorganisaatiorekisteri", row["yrityksen_jukon_tunniste"].ToString(), "els_organizationid", serviceProvider.GetService());
+                record.Attributes.Add("els_soteorganisaatio", GetSoteOrganization("els_soteorganisaatiorekisteri", row["yrityksen_jukon_tunniste"].ToString(), "els_ytunnus", serviceProvider.GetService()));
 
                 #endregion
 
@@ -282,6 +285,23 @@ namespace ImportUnionRepresentatives
                     break;
             }
             return value;
+        }
+
+        private static EntityReference GetSoteOrganization(string entityName, string conditionFieldValue, string conditionField, IOrganizationService service)
+        {
+
+            QueryExpression qryEntity = new QueryExpression(entityName);
+            qryEntity.Criteria.AddCondition(conditionField, ConditionOperator.Equal, conditionFieldValue);
+            qryEntity.Criteria.AddCondition("els_hierarchylevel", ConditionOperator.Equal, 0);
+
+            EntityCollection ecEntity = service.RetrieveMultiple(qryEntity);
+
+            if (ecEntity.Entities.Count > 0)
+            {
+                return ecEntity.Entities[0].ToEntityReference();
+            }
+            return null;
+
         }
 
     }
