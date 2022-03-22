@@ -49,12 +49,14 @@ namespace ImportUnionRepresentatives
 
             try
             {               
-                string result = "Succes";
+                string result = "Success";
                 var fileString = az.GetFileFromAzure("union-representatives", "Representatives.csv");
                 var table = ConvertToDatatable(fileString, crmLog);
-                var reqList = ProcessDataTableContent(table, crmLog, serviceProvider);
+                //var reqList = ProcessDataTableContent(table, crmLog, serviceProvider);
+                var reqList = ProcessDataTableContentV2(table, crmLog, serviceProvider);
+                string executedSuccessfuly = SendToCRM(reqList, crmLog, serviceProvider);
 
-                string executedSuccessfuly = ExecuteRequests(reqList, serviceProvider);
+                //string executedSuccessfuly = ExecuteRequests(reqList, serviceProvider);
                 if (executedSuccessfuly != "OK")
                 {
                     result = executedSuccessfuly;
@@ -111,6 +113,81 @@ namespace ImportUnionRepresentatives
 
             return resultTable;
         }
+        public static ExecuteMultipleRequest ProcessDataTableContentV2(DataTable table, CRM_Logger crmLog, CRM_ServiceProvider serviceProvider)
+        {
+            int updatesCounter = 0;
+            int insertsCounter = 0;
+            int batchLimit = 0;
+
+            ExecuteMultipleRequest exeReq = GetExecuteMultipleReq();
+            foreach (DataRow row in table.Rows)
+            {
+                //if commented do full import
+                /* if (batchLimit == 205)
+                 {
+                     break;
+                 }*/
+                var recKey = row["hetu"].ToString();
+                Entity record = GetLuottamusmiesRecord(recKey, serviceProvider);
+
+                foreach (DataColumn column in table.Columns)
+                {
+                    string columnName = column.ColumnName;
+                    string columnData = row[column].ToString();
+                    if (column.Ordinal == 0 && record.Id == Guid.Empty)//columnName.Equals("hetu")
+                    {
+                        var contact = GetRecord("contact", columnData, "els_hetu", serviceProvider.GetService());
+                        if (contact != null)
+                        {
+                            record.Attributes.Add("els_henkilo", contact);
+                        }
+                        else
+                        {
+                            var info = $"No Contact was found for Representative {row["sukunimi"]} {row["etunimi"]}";
+                            crmLog.AddDetailInfo(info);
+                        }
+                    }
+                }
+                #region Mappings
+                record.Attributes.Add("els_luottamusmiesnimi", row["yrityksen_nimi"].ToString() + " " + row["etunimi"].ToString() + " " + row["sukunimi"].ToString());
+                record.Attributes.Add("els_jasenjarjesto", row["jasenjarjesto"].ToString());
+                if (row["alkupvm"].ToString() != string.Empty)
+                    record.Attributes.Add("els_alkupaivamaara", DateTime.ParseExact(row["alkupvm"].ToString(), "yyyyMMdd", CultureInfo.InvariantCulture));
+                if (row["loppupvm"].ToString() != string.Empty)
+                    record.Attributes.Add("els_paattymispaivamaara", DateTime.ParseExact(row["loppupvm"].ToString(), "yyyyMMdd", CultureInfo.InvariantCulture));
+                record.Attributes.Add("els_luottamustehtava", new OptionSetValue(GetTehtavaOptionSetValue(row["tehtava"].ToString())));
+                if (row["paatoiminen"].ToString() == "E")
+                {
+                    record.Attributes.Add("els_paatoiminen", false);
+                }
+                else
+                {
+                    record.Attributes.Add("els_paatoiminen", true);
+                }
+                record.Attributes.Add("els_sopimusalat", row["sopimusalat"].ToString());
+                record.Attributes.Add("els_sektori", row["yrityksen_sektori"].ToString());
+                record.Attributes.Add("els_juko_id", row["ID\r"].ToString().Replace("\r", ""));
+                record.Attributes.Add("els_soteorganisaatio", GetSoteOrganization("els_soteorganisaatiorekisteri", row["yrityksen_ytunnus"].ToString(), "els_ytunnus", serviceProvider.GetService()));
+
+                #endregion
+
+                if (record.Id == Guid.Empty)
+                {
+                    CreateRequest createRequest = new CreateRequest { Target = record };
+                    exeReq.Requests.Add(createRequest);
+                    insertsCounter++;
+                }
+                else
+                {
+                    UpdateRequest updateRequest = new UpdateRequest { Target = record };
+                    exeReq.Requests.Add(updateRequest);
+                    updatesCounter++;
+                }
+                batchLimit++;
+            }
+            crmLog.AddDetailInfo($"This session were inserted {insertsCounter} records and updated {updatesCounter}");
+            return exeReq;
+        }
         public static List<ExecuteMultipleRequest> ProcessDataTableContent(DataTable table, CRM_Logger crmLog, CRM_ServiceProvider serviceProvider)
         {
             int updatesCounter = 0;
@@ -121,16 +198,16 @@ namespace ImportUnionRepresentatives
             Dictionary<string, string> mappings = GetMappings();
             foreach (DataRow row in table.Rows)
             {
-                if(batchLimit % 200 == 0)
+                if (batchLimit % 200 == 0)
                 {
                     multipleReqList.Add(exeReq);
                     exeReq.Requests.Clear();
                 }
                 //if commented do full import
-                if (batchLimit == 205)
-                {
-                    break;
-                }
+                /* if (batchLimit == 205)
+                 {
+                     break;
+                 }*/
                 var recKey = row["hetu"].ToString();
                 Entity record = GetLuottamusmiesRecord(recKey, serviceProvider);
 
@@ -222,6 +299,62 @@ namespace ImportUnionRepresentatives
             mappings.Add("ID", "els_juko_id");
 
             return mappings;
+        }
+
+        public static string SendToCRM(ExecuteMultipleRequest insertOrUpdateRequests, CRM_Logger crmLog, CRM_ServiceProvider serviceProvider)
+        {
+            string result = "OK";
+            int CRMBatchSize = 500;
+            List<ExecuteMultipleRequest> requestsList = new List<ExecuteMultipleRequest>();
+            if (insertOrUpdateRequests.Requests.Any())
+            {
+                int len = insertOrUpdateRequests.Requests.Count % CRMBatchSize == 0 ? insertOrUpdateRequests.Requests.Count / CRMBatchSize : insertOrUpdateRequests.Requests.Count / CRMBatchSize + 1;
+                for (int i = 0; i < len; i++)
+                {
+                    ExecuteMultipleRequest requests = new ExecuteMultipleRequest()
+                    {
+                        Settings = new ExecuteMultipleSettings()
+                        {
+                            ContinueOnError = true,
+                            ReturnResponses = true
+                        },
+                        Requests = new OrganizationRequestCollection()
+                    };
+
+                    requests.Requests.AddRange(insertOrUpdateRequests.Requests.Skip(i * CRMBatchSize).Take(CRMBatchSize));
+                    requestsList.Add(requests);
+                }
+            }
+            insertOrUpdateRequests.Requests.Clear();
+
+            if (requestsList.Count > 0)
+            {
+                foreach (ExecuteMultipleRequest req in requestsList)
+                {
+                    try
+                    {
+                        crmLog.AddDetailInfo($"Executing {req.Requests.Count} requests...");
+                        var service = serviceProvider.GetService();
+                        var response = (ExecuteMultipleResponse)service.Execute(req);
+                        response.ResponseName = req.RequestName;
+
+                        foreach (ExecuteMultipleResponseItem rsp in response.Responses.Where(r => r.Fault != null))
+                        {
+                            string msg = (rsp.Fault.Message ?? "") + " " + (rsp.Fault.TraceText ?? ""); 
+                            crmLog.AddDetailInfo(msg);
+                        }
+                    }
+                    catch (Exception reqEx)
+                    {
+                        crmLog.AddDetailInfo($"Error at ImportingToCRM \n {reqEx.Message}");
+                        result = "Not OK";
+                    }
+                }
+
+                requestsList.Clear();
+                requestsList = null;
+            }
+            return result;
         }
         public static string ExecuteRequests(List<ExecuteMultipleRequest> reqList, CRM_ServiceProvider serviceProvider)
         {
